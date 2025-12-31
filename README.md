@@ -51,9 +51,11 @@ npm run dev
 
 ## 🌐 Access
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
+- **Frontend**: http://localhost:3000 (always)
+- **Backend API**: http://localhost:8000 (always)
 - **API Docs**: http://localhost:8000/docs
+
+**Note**: The app is configured to always use ports 3000 and 8000. If you see different ports, run `./stop.sh` to free the ports, then `./restart.sh`.
 
 ## 📄 Pages
 

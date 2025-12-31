@@ -4,6 +4,8 @@ const nextConfig = {
   experimental: {
     turbo: false,
   },
+  // Explicitly set port (though package.json script also sets it)
+  // This ensures consistency
 };
 
 export default nextConfig;

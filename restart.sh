@@ -9,6 +9,12 @@ echo "📛 Stopping existing processes..."
 pkill -f "uvicorn.*app.main:app" 2>/dev/null
 pkill -f "next dev" 2>/dev/null
 pkill -f "next start" 2>/dev/null
+
+# Kill any processes using our ports
+echo "🔌 Freeing ports 3000 and 8000..."
+lsof -ti :3000 | xargs kill -9 2>/dev/null || true
+lsof -ti :3001 | xargs kill -9 2>/dev/null || true
+lsof -ti :8000 | xargs kill -9 2>/dev/null || true
 sleep 2
 
 # Start backend
@@ -85,11 +91,11 @@ if [ ! -d "node_modules" ]; then
     npm install
 fi
 
-# Start frontend in background
-npm run dev > ../frontend.log 2>&1 &
+# Start frontend in background (explicitly on port 3000)
+PORT=3000 npm run dev > ../frontend.log 2>&1 &
 FRONTEND_PID=$!
 cd ..
-echo "✅ Frontend started (PID: $FRONTEND_PID)"
+echo "✅ Frontend started on port 3000 (PID: $FRONTEND_PID)"
 echo "   Logs: tail -f frontend.log"
 echo "   ⏳ Wait 10-15 seconds for Next.js to compile routes..."
 echo ""
