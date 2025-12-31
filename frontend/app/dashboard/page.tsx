@@ -41,15 +41,42 @@ export default function DashboardPage() {
     async function fetchDashboardData() {
         try {
             setLoading(true)
+            setError(null)
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
             
+            // First check if backend is reachable
+            try {
+                const healthCheck = await fetch(`${apiUrl}/health`, { 
+                    method: "GET",
+                    signal: AbortSignal.timeout(3000)
+                })
+                if (!healthCheck.ok) {
+                    throw new Error(`Backend server returned status ${healthCheck.status}`)
+                }
+            } catch (healthErr) {
+                if (healthErr instanceof Error && healthErr.name === 'AbortError') {
+                    throw new Error("Backend server is not responding. Make sure it's running on " + apiUrl)
+                }
+                throw new Error(`Cannot connect to backend: ${healthErr instanceof Error ? healthErr.message : 'Unknown error'}`)
+            }
+            
             const [statsRes, oppsRes] = await Promise.all([
-                fetch(`${apiUrl}/api/stats`),
-                fetch(`${apiUrl}/api/listings/opportunities?limit=5`)
+                fetch(`${apiUrl}/api/stats`, {
+                    signal: AbortSignal.timeout(10000)
+                }),
+                fetch(`${apiUrl}/api/listings/opportunities?limit=5`, {
+                    signal: AbortSignal.timeout(10000)
+                })
             ])
 
-            if (!statsRes.ok || !oppsRes.ok) {
-                throw new Error("Failed to fetch dashboard data")
+            if (!statsRes.ok) {
+                const errorText = await statsRes.text().catch(() => statsRes.statusText)
+                throw new Error(`Failed to fetch stats: ${statsRes.status} ${errorText}`)
+            }
+            
+            if (!oppsRes.ok) {
+                const errorText = await oppsRes.text().catch(() => oppsRes.statusText)
+                throw new Error(`Failed to fetch opportunities: ${oppsRes.status} ${errorText}`)
             }
 
             const [statsData, oppsData] = await Promise.all([
@@ -60,7 +87,10 @@ export default function DashboardPage() {
             setStats(statsData)
             setOpportunities(oppsData)
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to load dashboard")
+            const errorMessage = err instanceof Error 
+                ? err.message 
+                : "Failed to load dashboard"
+            setError(errorMessage)
             console.error("Error fetching dashboard data:", err)
         } finally {
             setLoading(false)

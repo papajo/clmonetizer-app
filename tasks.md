@@ -43,6 +43,8 @@
 - [x] Improved scraper page with auto-refresh listings count
 - [x] Created comprehensive documentation (README.md, QUICK_START.md, CHECK_DATABASE.md)
 - [x] Fix 422 error on scraper endpoint - Improved error handling and validation
+- [x] Fixed "Failed to fetch" error on dashboard - Added health check, better error handling, and timeouts
+- [x] Enhanced CORS configuration - Added support for port 3001
 
 ## Pending
 - [ ] Add proper error boundaries (React error boundaries)
