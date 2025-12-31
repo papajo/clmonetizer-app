@@ -20,25 +20,41 @@ sleep 2
 # Start backend
 echo "🚀 Starting backend server..."
 cd backend
+
+# Setup virtual environment
 if [ ! -d "venv" ] && [ ! -d ".venv" ]; then
     echo "⚠️  No virtual environment found. Creating one..."
     python3 -m venv venv
-    source venv/bin/activate
-    pip install -q -r requirements.txt
+    VENV_PATH="venv"
+elif [ -d "venv" ]; then
+    VENV_PATH="venv"
 else
-    if [ -d "venv" ]; then
-        source venv/bin/activate
-    else
-        source .venv/bin/activate
-    fi
+    VENV_PATH=".venv"
+fi
+
+# Activate virtual environment and install/verify dependencies
+source "$VENV_PATH/bin/activate"
+
+# Check if critical dependencies are installed
+if ! python -c "import uvicorn, fastapi, sqlalchemy" 2>/dev/null; then
+    echo "📦 Installing backend dependencies..."
+    pip install -q -r requirements.txt || {
+        echo "⚠️  Full requirements.txt failed. Installing core dependencies..."
+        pip install -q uvicorn fastapi sqlalchemy pydantic python-dotenv
+        echo "⚠️  Installing additional dependencies..."
+        pip install -q psycopg2-binary playwright httpx alembic beautifulsoup4 pandas openai || true
+        echo "⚠️  Installing langchain packages (may have conflicts)..."
+        pip install -q langchain langchain-core langchain-community langchain-openai || echo "⚠️  Langchain packages failed - AI features may not work"
+    }
 fi
 
 # Install playwright browsers if needed
 echo "🌐 Checking Playwright browsers..."
 python -c "from playwright.sync_api import sync_playwright; sync_playwright().start()" 2>/dev/null || playwright install chromium 2>/dev/null || echo "⚠️  Playwright browsers may need manual installation"
 
-# Start backend in background
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
+# Start backend using python -m uvicorn (more reliable than binary)
+echo "🚀 Starting backend on port 8000..."
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
 BACKEND_PID=$!
 cd ..
 echo "✅ Backend started (PID: $BACKEND_PID)"
