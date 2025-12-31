@@ -33,6 +33,15 @@
 
 ## In Progress
 - [ ] Add pagination for listings and leads tables
+
+## Recent Fixes
+- [x] Fixed Node.js version issue - Added automatic Node.js 20 detection in restart script
+- [x] Created one-click restart script (`restart.sh`)
+- [x] Created stop script (`stop.sh`)
+- [x] Created test routes script (`test_routes.sh`)
+- [x] Added refresh button to dashboard
+- [x] Improved scraper page with auto-refresh listings count
+- [x] Created comprehensive documentation (README.md, QUICK_START.md, CHECK_DATABASE.md)
 - [x] Fix 422 error on scraper endpoint - Improved error handling and validation
 
 ## Pending

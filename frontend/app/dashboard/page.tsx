@@ -80,9 +80,14 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                <Button asChild variant="outline">
-                    <Link href="/dashboard/scraper">Start New Scrape</Link>
-                </Button>
+                <div className="flex gap-2">
+                    <Button onClick={fetchDashboardData} variant="outline" disabled={loading}>
+                        {loading ? "Refreshing..." : "Refresh"}
+                    </Button>
+                    <Button asChild variant="outline">
+                        <Link href="/dashboard/scraper">Start New Scrape</Link>
+                    </Button>
+                </div>
             </div>
 
             {loading ? (
