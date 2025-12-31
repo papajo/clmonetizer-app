@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -29,6 +29,7 @@ export default function ScraperPage() {
     const [loading, setLoading] = useState(false)
     const [lastScrape, setLastScrape] = useState<any>(null)
     const [error, setError] = useState<string | null>(null)
+    const [listingsCount, setListingsCount] = useState<number | null>(null)
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -36,6 +37,25 @@ export default function ScraperPage() {
             url: "",
         },
     })
+
+    async function checkListingsCount() {
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+            const response = await fetch(`${apiUrl}/api/stats`)
+            if (response.ok) {
+                const data = await response.json()
+                setListingsCount(data.total_listings)
+                console.log("Database stats:", data)
+            }
+        } catch (err) {
+            console.error("Error checking listings count:", err)
+        }
+    }
+
+    // Check listings count on mount
+    useEffect(() => {
+        checkListingsCount()
+    }, [])
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         setLoading(true)
@@ -102,6 +122,16 @@ export default function ScraperPage() {
             const data = await response.json()
             setLastScrape(data)
             form.reset()
+            
+            // Check for existing listings periodically
+            const checkInterval = setInterval(() => {
+                checkListingsCount()
+            }, 5000) // Check every 5 seconds
+            
+            // Stop checking after 2 minutes
+            setTimeout(() => {
+                clearInterval(checkInterval)
+            }, 120000)
         } catch (error) {
             console.error("Scrape error:", error)
             if (error instanceof Error) {
@@ -184,14 +214,14 @@ export default function ScraperPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-2">
+                        <div className="space-y-4">
                             <div className="flex items-center gap-2">
                                 <Badge variant="default">Active</Badge>
                                 <span className="text-sm text-muted-foreground">
                                     Scraping job started in the background
                                 </span>
                             </div>
-                            <div className="mt-4 p-3 bg-muted rounded-md">
+                            <div className="p-3 bg-muted rounded-md">
                                 <p className="text-sm font-medium mb-1">URL:</p>
                                 <a
                                     href={lastScrape.url}
@@ -202,9 +232,48 @@ export default function ScraperPage() {
                                     {lastScrape.url}
                                 </a>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-2">
-                                The scraping job is running in the background. Check the dashboard for new listings and opportunities.
-                            </p>
+                            <div className="flex gap-2 pt-2">
+                                <Button asChild variant="outline" size="sm">
+                                    <a href="/dashboard/listings">
+                                        View Listings
+                                    </a>
+                                </Button>
+                                <Button asChild variant="outline" size="sm">
+                                    <a href="/dashboard">
+                                        Go to Dashboard
+                                    </a>
+                                </Button>
+                            </div>
+                            <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
+                                <p className="text-sm text-blue-900 dark:text-blue-100 mb-2">
+                                    <strong>Note:</strong> The scraping job is running in the background. This may take a few minutes depending on the number of listings.
+                                </p>
+                                <div className="space-y-1">
+                                    {listingsCount !== null ? (
+                                        <>
+                                            <p className="text-sm text-blue-900 dark:text-blue-100 font-semibold">
+                                                ✅ Current listings in database: <strong className="text-lg">{listingsCount}</strong>
+                                            </p>
+                                            {listingsCount > 0 ? (
+                                                <p className="text-xs text-blue-700 dark:text-blue-300">
+                                                    Listings are being saved! Click <a href="/dashboard/listings" className="underline font-medium">View Listings</a> above to see them.
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-blue-700 dark:text-blue-300 italic">
+                                                    No listings found yet. The scraper may still be running, or no listings were found on the page. Check backend logs for details.
+                                                </p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <p className="text-sm text-blue-900 dark:text-blue-100">
+                                            Checking database...
+                                        </p>
+                                    )}
+                                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                                        💡 <strong>Tip:</strong> The scraper runs in the background. Results appear on the <a href="/dashboard/listings" className="underline font-medium">Listings page</a> as they're discovered. Check backend server console for detailed progress logs.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

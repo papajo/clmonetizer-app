@@ -165,8 +165,23 @@ async def run_scrape_job(url: str):
 
 @router.get("/listings")
 def get_listings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    listings = db.query(Listing).offset(skip).limit(limit).all()
+    listings = db.query(Listing).order_by(Listing.date_scraped.desc()).offset(skip).limit(limit).all()
     return listings
+
+@router.get("/listings/recent")
+def get_recent_listings(limit: int = 10, db: Session = Depends(get_db)):
+    """Get recently scraped listings, ordered by most recent first."""
+    listings = db.query(Listing).order_by(Listing.date_scraped.desc()).limit(limit).all()
+    return {
+        "count": len(listings),
+        "listings": listings
+    }
+
+@router.get("/listings/count")
+def get_listings_count(db: Session = Depends(get_db)):
+    """Get total count of listings in database."""
+    count = db.query(Listing).count()
+    return {"count": count}
 
 @router.get("/listings/opportunities")
 def get_opportunities(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -195,9 +210,14 @@ def get_stats(db: Session = Depends(get_db)):
         func.sum(Listing.profit_potential)
     ).scalar() or 0
     
+    # Get most recent listing date
+    most_recent = db.query(Listing).order_by(Listing.date_scraped.desc()).first()
+    most_recent_date = most_recent.date_scraped.isoformat() if most_recent else None
+    
     return {
         "total_listings": total_listings,
         "opportunities": opportunities,
         "total_leads": total_leads,
-        "total_profit_potential": float(profit_result) if profit_result else 0.0
+        "total_profit_potential": float(profit_result) if profit_result else 0.0,
+        "most_recent_scrape": most_recent_date
     }
