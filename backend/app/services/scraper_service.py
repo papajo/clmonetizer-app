@@ -9,65 +9,103 @@ class ScraperService:
         """
         Scrapes a Craigslist category page and returns a list of listing URLs.
         """
-        self.logger.info(f"Scraping category URL: {url}")
+        # Remove hash fragments from URL as they can cause issues
+        clean_url = url.split('#')[0]
+        self.logger.info(f"Scraping category URL: {clean_url}")
+        
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
             
             try:
-                await page.goto(url, wait_until="networkidle")
+                # Set a longer timeout for slow pages
+                await page.goto(clean_url, wait_until="networkidle", timeout=60000)
                 
-                # Extract listing elements
-                # Craigslist structure: 'li.cl-static-search-result' or similar. 
-                # We need to adapt to current CL structure. 
-                # Often it's `li.result-row` or `li.cl-search-result`
+                # Wait a bit for dynamic content to load
+                await page.wait_for_timeout(2000)
                 
-                # Check for standard 'li.cl-search-result'
                 listings_data = []
                 
-                # Get page content for AI parsing later if needed, but for now extract basic links
-                # Let's extract URLs from 'a.cl-app-anchor' inside 'li'
-                
-                # Using a generic strategy: find all links that look like posting links
-                # Usually contain '/cto/', '/ctd/', etc. or just end in .html
-                
-                # Let's grab all 'li' elements with class 'cl-search-result'
+                # Try multiple selector strategies for different Craigslist layouts
                 results = await page.evaluate('''() => {
-                    const items = document.querySelectorAll('li.cl-search-result');
                     const data = [];
-                    items.forEach(item => {
-                         const titleParams = item.getAttribute('title');
-                         const aTag = item.querySelector('a');
-                         if (aTag) {
-                             data.push({
-                                 url: aTag.href,
-                                 title: aTag.innerText
-                             });
-                         }
+                    
+                    // Strategy 1: Modern Craigslist - cl-search-result
+                    const modernItems = document.querySelectorAll('li.cl-search-result, li[data-pid]');
+                    modernItems.forEach(item => {
+                        const aTag = item.querySelector('a[href*="/d/"], a[href*=".html"]');
+                        if (aTag && aTag.href) {
+                            const title = aTag.textContent?.trim() || aTag.getAttribute('title') || 'Untitled';
+                            const priceElem = item.querySelector('.price, [class*="price"]');
+                            const price = priceElem ? priceElem.textContent?.trim() : null;
+                            data.push({
+                                url: aTag.href,
+                                title: title,
+                                price: price
+                            });
+                        }
                     });
+                    
+                    // Strategy 2: Older layout - result-row
                     if (data.length === 0) {
-                        // Fallback for older/different CL layouts (like lists)
-                        const listItems = document.querySelectorAll('.result-row');
+                        const listItems = document.querySelectorAll('.result-row, li.result-row');
                         listItems.forEach(row => {
-                            const a = row.querySelector('.result-title.hdrlnk');
-                            const meta = row.querySelector('.result-meta .result-price');
-                            if (a) {
+                            const a = row.querySelector('.result-title.hdrlnk, a.result-title');
+                            if (a && a.href) {
+                                const meta = row.querySelector('.result-meta .result-price, .result-price');
                                 data.push({
                                     url: a.href,
-                                    title: a.innerText,
-                                    price: meta ? meta.innerText : null
+                                    title: a.textContent?.trim() || 'Untitled',
+                                    price: meta ? meta.textContent?.trim() : null
                                 });
                             }
                         });
                     }
-                    return data;
+                    
+                    // Strategy 3: Generic - find all links that look like posting links
+                    if (data.length === 0) {
+                        const allLinks = document.querySelectorAll('a[href*="/d/"], a[href*=".html"]');
+                        allLinks.forEach(link => {
+                            const href = link.getAttribute('href');
+                            if (href && (href.includes('/d/') || href.endsWith('.html'))) {
+                                const parent = link.closest('li, .result-row, [data-pid]');
+                                if (parent) {
+                                    const title = link.textContent?.trim() || link.getAttribute('title') || 'Untitled';
+                                    const priceElem = parent.querySelector('.price, [class*="price"]');
+                                    data.push({
+                                        url: href.startsWith('http') ? href : new URL(href, window.location.href).href,
+                                        title: title,
+                                        price: priceElem ? priceElem.textContent?.trim() : null
+                                    });
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Remove duplicates based on URL
+                    const unique = [];
+                    const seen = new Set();
+                    data.forEach(item => {
+                        if (!seen.has(item.url)) {
+                            seen.add(item.url);
+                            unique.push(item);
+                        }
+                    });
+                    
+                    return unique;
                 }''')
                 
                 listings_data = results
-                self.logger.info(f"Found {len(listings_data)} listings.")
+                self.logger.info(f"Found {len(listings_data)} listings from {clean_url}")
+                
+                if len(listings_data) == 0:
+                    # Log page structure for debugging
+                    page_content = await page.content()
+                    self.logger.warning(f"No listings found. Page title: {await page.title()}")
+                    self.logger.warning(f"Page has {len(page_content)} characters")
                 
             except Exception as e:
-                self.logger.error(f"Error scraping {url}: {e}")
+                self.logger.error(f"Error scraping {clean_url}: {e}", exc_info=True)
                 listings_data = []
             finally:
                 await browser.close()

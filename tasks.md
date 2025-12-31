@@ -25,6 +25,10 @@
 - [x] Update listing details (description, location) from detailed scrape
 - [x] Fix sidebar icon for Listings page
 - [x] Add filtering and search functionality for listings (implemented in listings page)
+- [x] Fix scraper issues - Improved URL handling, multiple selector strategies, better error logging
+- [x] Add comprehensive logging for background jobs
+- [x] Improve scraper to handle hash fragments and modern Craigslist layouts
+- [x] Fix critical database session bug - Background tasks now create their own DB session
 
 ## In Progress
 - [ ] Add pagination for listings and leads tables
