@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, Field
 from typing import Optional
+import os
 from ..database import get_db, SessionLocal
 from ..models import Listing, Lead
 from ..services.scraper_service import scraper_service
@@ -163,6 +164,78 @@ async def run_scrape_job(url: str):
         # Close the database session
         db.close()
 
+@router.post("/listings/reanalyze")
+async def reanalyze_listings(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Re-analyze all existing listings that haven't been marked as opportunities.
+    Useful after setting up the OpenAI API key.
+    """
+    # Get listings that haven't been analyzed or failed analysis
+    listings = db.query(Listing).filter(
+        (Listing.is_arbitrage_opportunity == False) | (Listing.is_arbitrage_opportunity.is_(None))
+    ).all()
+    
+    count = len(listings)
+    logger.info(f"Queueing re-analysis for {count} listings")
+    
+    # Queue background task to re-analyze
+    background_tasks.add_task(reanalyze_listings_job, [l.id for l in listings])
+    
+    return {
+        "message": f"Re-analysis queued for {count} listings",
+        "count": count
+    }
+
+async def reanalyze_listings_job(listing_ids: list[int]):
+    """
+    Background task to re-analyze listings.
+    """
+    db = SessionLocal()
+    logger.info(f"Starting re-analysis for {len(listing_ids)} listings")
+    analyzed = 0
+    opportunities_found = 0
+    
+    try:
+        for listing_id in listing_ids:
+            try:
+                listing = db.query(Listing).filter(Listing.id == listing_id).first()
+                if not listing:
+                    continue
+                
+                # Prepare listing data for analysis
+                listing_data = {
+                    "title": listing.title or "Untitled",
+                    "price": listing.price,
+                    "description": listing.description or "",
+                    "location": listing.location or "",
+                    "url": listing.url
+                }
+                
+                # Run AI analysis
+                analysis = await ai_service.analyze_arbitrage(listing_data)
+                
+                # Update listing
+                listing.is_arbitrage_opportunity = analysis.is_arbitrage_opportunity
+                listing.profit_potential = analysis.profit_potential
+                listing.analysis_json = analysis.model_dump()
+                
+                db.commit()
+                analyzed += 1
+                
+                if analysis.is_arbitrage_opportunity:
+                    opportunities_found += 1
+                    logger.info(f"Opportunity found: {listing.title}")
+                    
+            except Exception as e:
+                logger.error(f"Error re-analyzing listing {listing_id}: {e}")
+                continue
+                
+    except Exception as e:
+        logger.error(f"Re-analysis job failed: {e}", exc_info=True)
+    finally:
+        logger.info(f"Re-analysis completed: {analyzed} analyzed, {opportunities_found} opportunities found")
+        db.close()
+
 @router.get("/listings")
 def get_listings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     listings = db.query(Listing).order_by(Listing.date_scraped.desc()).offset(skip).limit(limit).all()
@@ -214,10 +287,14 @@ def get_stats(db: Session = Depends(get_db)):
     most_recent = db.query(Listing).order_by(Listing.date_scraped.desc()).first()
     most_recent_date = most_recent.date_scraped.isoformat() if most_recent else None
     
+    # Check if AI service is configured
+    ai_configured = bool(os.getenv("OPENAI_API_KEY")) and not os.getenv("OPENAI_API_KEY", "").startswith("sk-dummy")
+    
     return {
         "total_listings": total_listings,
         "opportunities": opportunities,
         "total_leads": total_leads,
         "total_profit_potential": float(profit_result) if profit_result else 0.0,
-        "most_recent_scrape": most_recent_date
+        "most_recent_scrape": most_recent_date,
+        "ai_configured": ai_configured
     }

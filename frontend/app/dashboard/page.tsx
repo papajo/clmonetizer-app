@@ -8,13 +8,14 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, AlertCircle } from "lucide-react"
 
 interface Stats {
     total_listings: number
     opportunities: number
     total_leads: number
     total_profit_potential: number
+    ai_configured?: boolean
 }
 
 interface Listing {
@@ -147,6 +148,30 @@ export default function DashboardPage() {
                 </Card>
             ) : (
                 <>
+                    {stats && !stats.ai_configured && (
+                        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+                                    <AlertCircle className="h-5 w-5" />
+                                    AI Analysis Not Configured
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-sm text-yellow-900 dark:text-yellow-100 mb-4">
+                                    OpenAI API key is not configured. Without it, listings cannot be analyzed for arbitrage opportunities.
+                                </p>
+                                <div className="space-y-2 text-sm text-yellow-800 dark:text-yellow-200">
+                                    <p><strong>To fix this:</strong></p>
+                                    <ol className="list-decimal list-inside space-y-1 ml-2">
+                                        <li>Get your API key from <a href="https://platform.openai.com/account/api-keys" target="_blank" rel="noopener noreferrer" className="underline">OpenAI</a></li>
+                                        <li>Set the environment variable: <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">export OPENAI_API_KEY=sk-...</code></li>
+                                        <li>Restart the backend server</li>
+                                        <li>Re-analyze existing listings using the button below</li>
+                                    </ol>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
                     <div className="grid gap-4 md:grid-cols-3">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -205,10 +230,46 @@ export default function DashboardPage() {
                         <CardContent>
                             {opportunities.length === 0 ? (
                                 <div className="text-center py-8 text-muted-foreground">
-                                    <p>No opportunities found yet. Start scraping to discover deals!</p>
-                                    <Button asChild className="mt-4">
-                                        <Link href="/dashboard/scraper">Start Scraping</Link>
-                                    </Button>
+                                    <p>
+                                        {stats && !stats.ai_configured 
+                                            ? "AI analysis is not configured. Set up your OpenAI API key to analyze listings for arbitrage opportunities."
+                                            : "No opportunities found yet. Start scraping to discover deals!"
+                                        }
+                                    </p>
+                                    <div className="flex gap-2 justify-center mt-4">
+                                        {stats && !stats.ai_configured ? (
+                                            <Button asChild variant="outline">
+                                                <Link href="/dashboard/settings">Configure API Key</Link>
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                <Button asChild>
+                                                    <Link href="/dashboard/scraper">Start Scraping</Link>
+                                                </Button>
+                                                {stats && stats.total_listings > 0 && (
+                                                    <Button 
+                                                        onClick={async () => {
+                                                            try {
+                                                                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/listings/reanalyze`, {
+                                                                    method: "POST"
+                                                                })
+                                                                if (response.ok) {
+                                                                    const data = await response.json()
+                                                                    alert(`Re-analysis started for ${data.count} listings. This may take a few minutes.`)
+                                                                    setTimeout(() => fetchDashboardData(), 5000)
+                                                                }
+                                                            } catch (err) {
+                                                                console.error("Error starting re-analysis:", err)
+                                                            }
+                                                        }}
+                                                        variant="outline"
+                                                    >
+                                                        Re-analyze Existing Listings
+                                                    </Button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             ) : (
                                 <Table>

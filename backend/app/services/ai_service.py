@@ -18,12 +18,27 @@ class LeadResult(BaseModel):
 
 class AIService:
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0)
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or api_key.startswith("sk-dummy") or api_key == "":
+            self.llm = None
+            self.api_key_configured = False
+        else:
+            self.llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0, api_key=api_key)
+            self.api_key_configured = True
 
     async def analyze_arbitrage(self, listing_data: dict) -> AnalysisResult:
         """
         Analyzes a listing to determine if it's a good arbitrage opportunity.
         """
+        # Check if API key is configured
+        if not self.api_key_configured or self.llm is None:
+            return AnalysisResult(
+                is_arbitrage_opportunity=False,
+                profit_potential=0,
+                reasoning="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable. Get your key at https://platform.openai.com/account/api-keys",
+                suggested_platform="None"
+            )
+        
         parser = PydanticOutputParser(pydantic_object=AnalysisResult)
         
         prompt = ChatPromptTemplate.from_messages([
@@ -61,11 +76,20 @@ Additional Details: {additional}
             })
             return result
         except Exception as e:
+            error_msg = str(e)
+            # Provide more helpful error messages
+            if "401" in error_msg or "invalid_api_key" in error_msg.lower():
+                error_msg = "Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable."
+            elif "429" in error_msg or "rate_limit" in error_msg.lower():
+                error_msg = "OpenAI API rate limit exceeded. Please try again later."
+            else:
+                error_msg = f"AI analysis error: {error_msg}"
+            
             print(f"Error in AI analysis: {e}")
             return AnalysisResult(
                 is_arbitrage_opportunity=False, 
                 profit_potential=0, 
-                reasoning=f"Error during analysis: {str(e)}", 
+                reasoning=error_msg, 
                 suggested_platform="None"
             )
 

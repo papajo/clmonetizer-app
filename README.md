@@ -88,6 +88,8 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 For development, SQLite is used by default if `DATABASE_URL` is not set.
 
+**⚠️ Important:** The `OPENAI_API_KEY` is required for AI analysis to work. Without it, you'll see 0 arbitrage opportunities even after scraping. See [SETUP_OPENAI.md](SETUP_OPENAI.md) for detailed setup instructions.
+
 ## 🐛 Troubleshooting
 
 ### 404 Errors on Pages

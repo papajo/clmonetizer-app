@@ -45,6 +45,9 @@
 - [x] Fix 422 error on scraper endpoint - Improved error handling and validation
 - [x] Fixed "Failed to fetch" error on dashboard - Added health check, better error handling, and timeouts
 - [x] Enhanced CORS configuration - Added support for port 3001
+- [x] Fixed "0 arbitrage opportunities" issue - Added OpenAI API key validation and better error messages
+- [x] Added re-analyze endpoint to process existing listings after API key setup
+- [x] Added AI configuration status indicator on dashboard
 
 ## Pending
 - [ ] Add proper error boundaries (React error boundaries)
