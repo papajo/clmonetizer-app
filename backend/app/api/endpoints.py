@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, Field
+from typing import Optional
 from ..database import get_db, SessionLocal
 from ..models import Listing, Lead
 from ..services.scraper_service import scraper_service
@@ -22,20 +23,39 @@ class ScrapeRequest(BaseModel):
         }
 
 @router.post("/scrape")
-async def start_scrape(request: ScrapeRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def start_scrape(
+    background_tasks: BackgroundTasks,
+    request: Optional[ScrapeRequest] = None,
+    url: Optional[str] = Query(None, description="URL to scrape (alternative to request body)"),
+    db: Session = Depends(get_db)
+):
     """
     Starts a scraping job in the background.
+    Accepts URL either in request body as JSON: {"url": "..."} or as query parameter: ?url=...
     """
-    # Validate URL format
-    if not request.url or not isinstance(request.url, str) or not request.url.strip():
-        raise HTTPException(status_code=422, detail="URL is required and must be a non-empty string")
+    # Get URL from either request body or query parameter
+    url_value = None
+    if request and request.url:
+        url_value = request.url
+    elif url:
+        url_value = url
     
-    url = request.url.strip()
-    if not url.startswith(('http://', 'https://')):
+    if not url_value:
+        raise HTTPException(
+            status_code=422, 
+            detail="URL is required. Provide it either in request body as {'url': '...'} or as query parameter ?url=..."
+        )
+    
+    # Validate URL format
+    if not isinstance(url_value, str) or not url_value.strip():
+        raise HTTPException(status_code=422, detail="URL must be a non-empty string")
+    
+    url_value = url_value.strip()
+    if not url_value.startswith(('http://', 'https://')):
         raise HTTPException(status_code=422, detail="URL must start with http:// or https://")
     
-    background_tasks.add_task(run_scrape_job, url)
-    return {"message": "Scraping started", "url": url}
+    background_tasks.add_task(run_scrape_job, url_value)
+    return {"message": "Scraping started", "url": url_value}
 
 async def run_scrape_job(url: str):
     """

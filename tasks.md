@@ -29,6 +29,7 @@
 - [x] Add comprehensive logging for background jobs
 - [x] Improve scraper to handle hash fragments and modern Craigslist layouts
 - [x] Fix critical database session bug - Background tasks now create their own DB session
+- [x] Fix 422 error - Endpoint now accepts URL in both request body and query parameter
 
 ## In Progress
 - [ ] Add pagination for listings and leads tables
