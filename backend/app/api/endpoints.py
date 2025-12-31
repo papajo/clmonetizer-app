@@ -27,7 +27,6 @@ async def start_scrape(
     background_tasks: BackgroundTasks,
     request: Optional[ScrapeRequest] = None,
     url: Optional[str] = Query(None, description="URL to scrape (alternative to request body)"),
-    db: Session = Depends(get_db)
 ):
     """
     Starts a scraping job in the background.
@@ -54,7 +53,9 @@ async def start_scrape(
     if not url_value.startswith(('http://', 'https://')):
         raise HTTPException(status_code=422, detail="URL must start with http:// or https://")
     
+    # Queue the background task and return immediately
     background_tasks.add_task(run_scrape_job, url_value)
+    logger.info(f"Scrape job queued for URL: {url_value}")
     return {"message": "Scraping started", "url": url_value}
 
 async def run_scrape_job(url: str):

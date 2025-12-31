@@ -46,14 +46,34 @@ export default function ScraperPage() {
             
             console.log("Sending scrape request:", { apiUrl: `${apiUrl}/api/scrape`, body: requestBody })
             
+            // First check if backend is reachable
+            try {
+                const healthCheck = await fetch(`${apiUrl}/health`, { 
+                    method: "GET",
+                    signal: AbortSignal.timeout(3000) // 3 second timeout for health check
+                })
+                if (!healthCheck.ok) {
+                    throw new Error("Backend server is not responding properly")
+                }
+            } catch (healthError) {
+                throw new Error("Cannot connect to backend server. Please ensure the backend is running on " + apiUrl)
+            }
+            
+            // Add timeout to prevent hanging
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+            
             const response = await fetch(`${apiUrl}/api/scrape`, {
                 method: "POST",
                 headers: { 
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                signal: controller.signal
             })
+            
+            clearTimeout(timeoutId)
 
             if (!response.ok) {
                 let errorMessage = `Failed to start scrape: ${response.statusText}`
@@ -84,7 +104,15 @@ export default function ScraperPage() {
             form.reset()
         } catch (error) {
             console.error("Scrape error:", error)
-            setError(error instanceof Error ? error.message : "Failed to start scraping job")
+            if (error instanceof Error) {
+                if (error.name === 'AbortError') {
+                    setError("Request timed out. Please check if the backend server is running.")
+                } else {
+                    setError(error.message)
+                }
+            } else {
+                setError("Failed to start scraping job")
+            }
         } finally {
             setLoading(false)
         }
