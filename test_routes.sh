@@ -39,7 +39,7 @@ done
 echo ""
 echo "📊 Testing API Endpoints..."
 api_routes=(
-    "/api/health"
+    "/health"
     "/api/stats"
     "/api/listings/count"
     "/api/listings?limit=1"

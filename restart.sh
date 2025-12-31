@@ -74,6 +74,12 @@ fi
 
 echo "   Using Node.js: $(node --version)"
 
+# Clear Next.js cache to fix 404 issues
+if [ -d ".next" ]; then
+    echo "🧹 Clearing Next.js cache..."
+    rm -rf .next
+fi
+
 if [ ! -d "node_modules" ]; then
     echo "📦 Installing frontend dependencies..."
     npm install
@@ -85,6 +91,7 @@ FRONTEND_PID=$!
 cd ..
 echo "✅ Frontend started (PID: $FRONTEND_PID)"
 echo "   Logs: tail -f frontend.log"
+echo "   ⏳ Wait 10-15 seconds for Next.js to compile routes..."
 echo ""
 
 # Wait a bit for servers to start

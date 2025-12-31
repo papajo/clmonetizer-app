@@ -70,9 +70,22 @@ npm run dev
 ## Troubleshooting
 
 ### 404 Errors on Pages
-1. Make sure frontend is running: `npm run dev` in frontend folder
-2. Check browser console for errors
-3. Try hard refresh: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)
+**Quick Fix:**
+```bash
+./fix_404.sh
+```
+
+This will:
+- Clear Next.js cache
+- Restart frontend server
+- Recompile all routes
+
+**Manual Fix:**
+1. Stop frontend: `pkill -f "next dev"`
+2. Clear cache: `cd frontend && rm -rf .next`
+3. Restart: `cd frontend && npm run dev`
+4. Wait 15-20 seconds for routes to compile
+5. Hard refresh browser: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)
 
 ### Dashboard Not Updating
 1. Check backend is running: `curl http://localhost:8000/health`

@@ -91,9 +91,19 @@ For development, SQLite is used by default if `DATABASE_URL` is not set.
 ## 🐛 Troubleshooting
 
 ### 404 Errors on Pages
-1. Make sure frontend is running: Check `frontend.log`
-2. Hard refresh browser: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)
-3. Clear Next.js cache: `rm -rf frontend/.next && cd frontend && npm run dev`
+**Quick Fix:**
+```bash
+./fix_404.sh
+```
+
+This automatically clears the Next.js cache and restarts the server.
+
+**Manual Steps:**
+1. Stop frontend: `pkill -f "next dev"`
+2. Clear cache: `cd frontend && rm -rf .next`
+3. Restart: `cd frontend && npm run dev`
+4. Wait 15-20 seconds for routes to compile
+5. Hard refresh browser: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)
 
 ### Dashboard Not Updating
 1. Check backend is running: `curl http://localhost:8000/health`
