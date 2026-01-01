@@ -1,9 +1,25 @@
 import os
 import json
-from langchain_openai import ChatOpenAI
+from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
+
+# Load .env file
+load_dotenv()
+
+# Try to import OpenAI and Gemini
+try:
+    from langchain_openai import ChatOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
 
 class AnalysisResult(BaseModel):
     is_arbitrage_opportunity: bool = Field(description="True if the item is underpriced and can be flipped.")
@@ -18,13 +34,40 @@ class LeadResult(BaseModel):
 
 class AIService:
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key or api_key.startswith("sk-dummy") or api_key == "":
-            self.llm = None
-            self.api_key_configured = False
-        else:
-            self.llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0, api_key=api_key)
-            self.api_key_configured = True
+        # Try Gemini first (often free/cheaper), then OpenAI
+        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        
+        self.llm = None
+        self.api_key_configured = False
+        self.provider = None
+        
+        # Prefer Gemini if available
+        if GEMINI_AVAILABLE and gemini_key and not gemini_key.startswith("dummy"):
+            try:
+                self.llm = ChatGoogleGenerativeAI(
+                    model="gemini-pro",
+                    google_api_key=gemini_key,
+                    temperature=0
+                )
+                self.api_key_configured = True
+                self.provider = "gemini"
+                print("✅ Using Gemini API for AI analysis")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize Gemini: {e}")
+        
+        # Fallback to OpenAI
+        if not self.api_key_configured and OPENAI_AVAILABLE and openai_key and not openai_key.startswith("sk-dummy") and openai_key != "":
+            try:
+                self.llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0, api_key=openai_key)
+                self.api_key_configured = True
+                self.provider = "openai"
+                print("✅ Using OpenAI API for AI analysis")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize OpenAI: {e}")
+        
+        if not self.api_key_configured:
+            print("⚠️  No AI API key configured. Set GEMINI_API_KEY or OPENAI_API_KEY in .env file")
 
     async def analyze_arbitrage(self, listing_data: dict) -> AnalysisResult:
         """
@@ -35,7 +78,7 @@ class AIService:
             return AnalysisResult(
                 is_arbitrage_opportunity=False,
                 profit_potential=0,
-                reasoning="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable. Get your key at https://platform.openai.com/account/api-keys",
+                reasoning="AI API key not configured. Please set GEMINI_API_KEY (recommended, free tier available) or OPENAI_API_KEY in .env file. Get Gemini key at https://makersuite.google.com/app/apikey or OpenAI key at https://platform.openai.com/account/api-keys",
                 suggested_platform="None"
             )
         
@@ -78,12 +121,14 @@ Additional Details: {additional}
         except Exception as e:
             error_msg = str(e)
             # Provide more helpful error messages
-            if "401" in error_msg or "invalid_api_key" in error_msg.lower():
-                error_msg = "Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable."
+            if "401" in error_msg or "invalid_api_key" in error_msg.lower() or "api_key" in error_msg.lower():
+                provider_name = "Gemini" if self.provider == "gemini" else "OpenAI"
+                error_msg = f"Invalid {provider_name} API key. Please check your API key in .env file."
             elif "429" in error_msg or "rate_limit" in error_msg.lower():
-                error_msg = "OpenAI API rate limit exceeded. Please try again later."
+                provider_name = "Gemini" if self.provider == "gemini" else "OpenAI"
+                error_msg = f"{provider_name} API rate limit exceeded. Please try again later."
             else:
-                error_msg = f"AI analysis error: {error_msg}"
+                error_msg = f"AI analysis error ({self.provider or 'unknown'}): {error_msg}"
             
             print(f"Error in AI analysis: {e}")
             return AnalysisResult(

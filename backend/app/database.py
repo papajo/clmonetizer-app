@@ -3,11 +3,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Default to SQLite for development if DATABASE_URL is not set
+# Default to SQLite for development if DATABASE_URL is not set or points to Docker host
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
+if not DATABASE_URL or "db:5432" in DATABASE_URL or "localhost" not in DATABASE_URL.lower():
     DATABASE_URL = "sqlite:///./clmonetizer.db"
-    print("Warning: DATABASE_URL not set, using SQLite database")
+    if DATABASE_URL != os.getenv("DATABASE_URL"):
+        print("Warning: DATABASE_URL points to Docker or is invalid, using SQLite database for local development")
+    else:
+        print("Warning: DATABASE_URL not set, using SQLite database")
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

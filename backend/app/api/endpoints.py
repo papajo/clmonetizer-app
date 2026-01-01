@@ -287,8 +287,13 @@ def get_stats(db: Session = Depends(get_db)):
     most_recent = db.query(Listing).order_by(Listing.date_scraped.desc()).first()
     most_recent_date = most_recent.date_scraped.isoformat() if most_recent else None
     
-    # Check if AI service is configured
-    ai_configured = bool(os.getenv("OPENAI_API_KEY")) and not os.getenv("OPENAI_API_KEY", "").startswith("sk-dummy")
+    # Check if AI service is configured (Gemini or OpenAI)
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+    ai_configured = (
+        (gemini_key and not gemini_key.startswith("dummy")) or
+        (openai_key and not openai_key.startswith("sk-dummy") and openai_key != "")
+    )
     
     return {
         "total_listings": total_listings,
