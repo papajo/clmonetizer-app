@@ -101,8 +101,8 @@ async def run_scrape_job(url: str):
                         title=item.get('title', 'Untitled'),
                         url=item['url'],
                         price=price,
-                        source="craigslist"
-                    )
+                        source="craigslist",
+                        is_free_item=item.get('is_free', False)
                     db.add(listing)
                     db.commit()
                     db.refresh(listing)
@@ -124,14 +124,40 @@ async def run_scrape_job(url: str):
                         
                         db.commit()
                         
-                        # Trigger AI Analysis
+                        # Trigger AI Analysis (enhanced with PDF strategies)
                         # In a real app, this might be a separate worker queue
                         try:
-                            analysis = await ai_service.analyze_arbitrage({**item, **details})
+                            listing_data = {**item, **details}
+                            
+                            # Main arbitrage analysis
+                            analysis = await ai_service.analyze_arbitrage(listing_data)
                             
                             listing.is_arbitrage_opportunity = analysis.is_arbitrage_opportunity
                             listing.profit_potential = analysis.profit_potential
                             listing.analysis_json = analysis.model_dump()
+                            
+                            # Store enhanced fields from analysis
+                            if hasattr(analysis, 'category'):
+                                listing.category = analysis.category
+                            if hasattr(analysis, 'market_demand'):
+                                listing.market_demand = analysis.market_demand
+                            if hasattr(analysis, 'recommended_price'):
+                                listing.recommended_price = analysis.recommended_price
+                            
+                            # Ad quality analysis
+                            try:
+                                ad_quality = await ai_service.analyze_ad_quality(listing_data)
+                                listing.ad_quality_score = ad_quality.overall_score
+                                listing.ad_quality_json = ad_quality.model_dump()
+                            except Exception as ad_error:
+                                logger.warning(f"Ad quality analysis failed: {ad_error}")
+                            
+                            # Market research analysis
+                            try:
+                                market_research = await ai_service.analyze_market_research(listing_data)
+                                listing.market_research_json = market_research.model_dump()
+                            except Exception as mr_error:
+                                logger.warning(f"Market research analysis failed: {mr_error}")
                             
                             if analysis.is_arbitrage_opportunity:
                                 logger.info(f"Arbitrage opportunity found: {listing.title}")
@@ -268,6 +294,40 @@ def get_opportunities(skip: int = 0, limit: int = 100, db: Session = Depends(get
 def get_leads(db: Session = Depends(get_db)):
     leads = db.query(Lead).all()
     return leads
+
+@router.get("/listings/free")
+def get_free_items(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Get listings from the 'free' section that can be resold for profit."""
+    listings = db.query(Listing).filter(
+        Listing.is_free_item == True
+    ).order_by(Listing.date_scraped.desc()).offset(skip).limit(limit).all()
+    return listings
+
+@router.get("/listings/by-category")
+def get_listings_by_category(
+    category: str = Query(..., description="Category to filter by (e.g., 'car', 'appliance', 'furniture')"),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """Get listings filtered by category."""
+    listings = db.query(Listing).filter(
+        Listing.category == category
+    ).order_by(Listing.date_scraped.desc()).offset(skip).limit(limit).all()
+    return listings
+
+@router.get("/listings/high-quality-ads")
+def get_high_quality_ads(
+    min_score: float = Query(70.0, description="Minimum ad quality score (0-100)"),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """Get listings with high ad quality scores."""
+    listings = db.query(Listing).filter(
+        Listing.ad_quality_score >= min_score
+    ).order_by(Listing.ad_quality_score.desc()).offset(skip).limit(limit).all()
+    return listings
 
 @router.get("/stats")
 def get_stats(db: Session = Depends(get_db)):

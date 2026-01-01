@@ -26,6 +26,25 @@ class AnalysisResult(BaseModel):
     profit_potential: float = Field(description="Estimated profit in USD.")
     reasoning: str = Field(description="Explanation of why this is a good deal.")
     suggested_platform: str = Field(description="Where to resell: 'Facebook Marketplace', 'eBay', etc.")
+    category: str = Field(default="", description="Item category: 'car', 'appliance', 'furniture', 'electronics', etc.")
+    market_demand: str = Field(default="", description="Market demand assessment: 'high', 'medium', 'low'")
+    recommended_price: float = Field(default=0.0, description="Recommended resale price based on market research")
+
+class AdQualityScore(BaseModel):
+    overall_score: float = Field(description="Overall ad quality score 0-100")
+    has_good_title: bool = Field(description="Title is clear, specific, and includes key details")
+    has_detailed_description: bool = Field(description="Description is comprehensive and informative")
+    has_photos: bool = Field(description="Ad includes photos")
+    pricing_appropriate: bool = Field(description="Price is competitive and realistic")
+    suggestions: str = Field(description="Suggestions for improving the ad based on best practices")
+
+class MarketResearch(BaseModel):
+    competition_level: str = Field(description="Competition level: 'high', 'medium', 'low'")
+    average_market_price: float = Field(description="Average market price for similar items")
+    price_competitiveness: str = Field(description="How competitive the price is: 'very competitive', 'competitive', 'overpriced'")
+    demand_level: str = Field(description="Demand level: 'high', 'medium', 'low'")
+    best_selling_season: str = Field(default="", description="Best time of year to sell this item")
+    top_profitable_categories: list = Field(default_factory=list, description="Top profitable categories from the PDF")
 
 class LeadResult(BaseModel):
     is_lead: bool = Field(description="True if this is a 'wanted' ad or a service lead.")
@@ -109,16 +128,34 @@ class AIService:
         parser = PydanticOutputParser(pydantic_object=AnalysisResult)
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert flipper and market analyst specializing in identifying arbitrage opportunities on Craigslist.
-            
+            ("system", """You are an expert flipper and market analyst specializing in identifying arbitrage opportunities on Craigslist, based on proven strategies from successful sellers.
+
 Your task is to analyze listings and determine if they represent profitable arbitrage opportunities. Consider:
+
+CATEGORY-SPECIFIC PROFITABILITY (from proven strategies):
+- Cars: Highest profit margin ($5000-$100,000 range), especially if you can get at half price and fix minor issues
+- Appliances: High demand, good supply, 1/4 to 1/3 of new price is typical market value
+- Furniture: High-end solid wood furniture is in high demand (beds, chairs, dining tables, desks, mirrors, couches)
+- Electronics: High-end items sell well, especially if barely used
+- Bikes/Motorbikes: Seasonal pricing - buy in winter, sell in summer for profit
+- Power tools/Equipment: Large supply, especially during fire-sales when dealers change professions
+- Mobile Phones: Large supply due to frequent upgrades, high demand for replacements
+
+MARKET ANALYSIS:
 - Current market value of similar items
 - Condition and description quality
-- Price competitiveness
+- Price competitiveness (should be 1/4 to 1/3 of new price for appliances, half price for cars)
 - Resale potential on platforms like Facebook Marketplace, eBay, OfferUp
 - Estimated profit after fees and time investment
+- Market demand (high/medium/low)
+- Competition level in the market
 
-Only flag items as opportunities if the profit potential is significant (typically $50+)."""),
+PRICING STRATEGY:
+- For appliances: Market typically 1/4 to 1/3 of new price
+- For cars: Look for deals at half price, potential to earn thousands per car
+- Inflate price slightly (10-20%) to allow for negotiation while still being competitive
+
+Only flag items as opportunities if the profit potential is significant (typically $50+ for smaller items, $500+ for cars/appliances)."""),
             ("user", """Analyze this Craigslist listing for arbitrage potential:
 
 Title: {title}
@@ -160,6 +197,156 @@ Additional Details: {additional}
                 profit_potential=0, 
                 reasoning=error_msg, 
                 suggested_platform="None"
+            )
+
+    async def analyze_ad_quality(self, listing_data: dict) -> AdQualityScore:
+        """
+        Analyzes ad quality based on best practices from the PDF.
+        """
+        if not self.api_key_configured or self.llm is None:
+            return AdQualityScore(
+                overall_score=0,
+                has_good_title=False,
+                has_detailed_description=False,
+                has_photos=False,
+                pricing_appropriate=False,
+                suggestions="AI API key not configured"
+            )
+        
+        parser = PydanticOutputParser(pydantic_object=AdQualityScore)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert at evaluating Craigslist ad quality based on proven best practices.
+
+Evaluate ads based on these criteria from successful sellers:
+
+TITLE QUALITY:
+- Should be short and to the point
+- Include item name, brand (if applicable), and price
+- Should NOT include negative details (save those for description)
+- Should be accurate and not misleading
+
+DESCRIPTION QUALITY:
+- Should be detailed and comprehensive
+- Include: model, make, brand, age, condition, any issues or malfunctions
+- Mention if item works well or what's not working
+- Include if item is clean or needs cleaning
+- Should NOT include: email address, address, personal info, "need to sell quickly"
+- More information = fewer queries from buyers
+
+PHOTOS:
+- Essential for sales
+- Should have at least one photo
+- Multiple angles are better
+- Clean background, well-lit
+- Avoid extreme close-ups that highlight flaws
+
+PRICING:
+- Should be realistic (not expecting full retail price)
+- Competitive with market (check garage sales, eBay for reference)
+- Can be slightly inflated (10-20%) to allow negotiation
+- Should reflect condition accurately"""),
+            ("user", """Evaluate the quality of this Craigslist ad:
+
+Title: {title}
+Price: {price}
+Description: {description}
+Has Photos: {has_photos}
+
+{format_instructions}""")
+        ])
+        
+        chain = prompt | self.llm | parser
+        
+        try:
+            result = await chain.ainvoke({
+                "title": listing_data.get("title", "N/A"),
+                "price": listing_data.get("price", "N/A"),
+                "description": listing_data.get("description", listing_data.get("body", "")),
+                "has_photos": "yes" if listing_data.get("has_images") or listing_data.get("images") else "unknown",
+                "format_instructions": parser.get_format_instructions()
+            })
+            return result
+        except Exception as e:
+            print(f"Error in ad quality analysis: {e}")
+            return AdQualityScore(
+                overall_score=0,
+                has_good_title=False,
+                has_detailed_description=False,
+                has_photos=False,
+                pricing_appropriate=False,
+                suggestions=f"Error analyzing ad quality: {str(e)}"
+            )
+
+    async def analyze_market_research(self, listing_data: dict) -> MarketResearch:
+        """
+        Performs market research analysis based on the listing.
+        """
+        if not self.api_key_configured or self.llm is None:
+            return MarketResearch(
+                competition_level="unknown",
+                average_market_price=0.0,
+                price_competitiveness="unknown",
+                demand_level="unknown",
+                best_selling_season="",
+                top_profitable_categories=[]
+            )
+        
+        parser = PydanticOutputParser(pydantic_object=MarketResearch)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a market research expert specializing in Craigslist arbitrage opportunities.
+
+Analyze market conditions based on proven strategies:
+
+TOP PROFITABLE CATEGORIES (in order):
+1. Cars - Highest profit margin ($5000-$100,000 range)
+2. Electrical devices/appliances - High demand and supply
+3. Motorbikes/Scooters - Seasonal (buy winter, sell summer)
+4. Bikes - Good profit after repairs
+5. Furniture - High-end solid wood in high demand
+6. Electronic items - High-end items sell well
+7. Computers - Good if you can repair
+8. Yard tools - Profitable if you can repair small engines
+9. Power equipment/tools - Large supply, fire-sales common
+10. Mobile phones - Large supply, high demand
+
+MARKET ANALYSIS:
+- Competition: Check how many similar listings exist (high/medium/low)
+- Average market price: Typical price for similar items in good condition
+- Price competitiveness: Compare listing price to market average
+- Demand: Based on category and item type (high/medium/low)
+- Best selling season: When is this item most in demand?"""),
+            ("user", """Perform market research for this listing:
+
+Title: {title}
+Price: {price}
+Description: {description}
+Category: {category}
+
+{format_instructions}""")
+        ])
+        
+        chain = prompt | self.llm | parser
+        
+        try:
+            result = await chain.ainvoke({
+                "title": listing_data.get("title", "N/A"),
+                "price": listing_data.get("price", "N/A"),
+                "description": listing_data.get("description", listing_data.get("body", "")),
+                "category": listing_data.get("category", "general"),
+                "format_instructions": parser.get_format_instructions()
+            })
+            return result
+        except Exception as e:
+            print(f"Error in market research: {e}")
+            return MarketResearch(
+                competition_level="unknown",
+                average_market_price=0.0,
+                price_competitiveness="unknown",
+                demand_level="unknown",
+                best_selling_season="",
+                top_profitable_categories=[]
             )
 
     async def analyze_lead(self, listing_data: dict) -> LeadResult:

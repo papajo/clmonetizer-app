@@ -155,7 +155,11 @@ export default function ScraperPage() {
             <Card className="w-full max-w-2xl">
                 <CardHeader>
                     <CardTitle>Start New Scrape Job</CardTitle>
-                    <CardDescription>Enter a Craigslist category URL to start finding deals.</CardDescription>
+                    <CardDescription>
+                        Enter a Craigslist category URL to start finding deals. 
+                        <br />
+                        <strong>Tip:</strong> Try scraping the "free" section (e.g., https://[city].craigslist.org/search/sss?query=free) for items you can resell for 100% profit!
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...form}>

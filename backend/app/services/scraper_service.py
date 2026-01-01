@@ -8,10 +8,14 @@ class ScraperService:
     async def scrape_category(self, url: str):
         """
         Scrapes a Craigslist category page and returns a list of listing URLs.
+        Supports both regular "for sale" items and "free" section items.
         """
         # Remove hash fragments from URL as they can cause issues
         clean_url = url.split('#')[0]
         self.logger.info(f"Scraping category URL: {clean_url}")
+        
+        # Detect if this is a "free" section
+        is_free_section = "/free" in clean_url.lower() or "free" in clean_url.lower()
         
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -27,73 +31,76 @@ class ScraperService:
                 listings_data = []
                 
                 # Try multiple selector strategies for different Craigslist layouts
-                results = await page.evaluate('''() => {
+                results = await page.evaluate(f'''(isFree) => {{
                     const data = [];
                     
                     // Strategy 1: Modern Craigslist - cl-search-result
                     const modernItems = document.querySelectorAll('li.cl-search-result, li[data-pid]');
-                    modernItems.forEach(item => {
+                    modernItems.forEach(item => {{
                         const aTag = item.querySelector('a[href*="/d/"], a[href*=".html"]');
-                        if (aTag && aTag.href) {
+                        if (aTag && aTag.href) {{
                             const title = aTag.textContent?.trim() || aTag.getAttribute('title') || 'Untitled';
                             const priceElem = item.querySelector('.price, [class*="price"]');
                             const price = priceElem ? priceElem.textContent?.trim() : null;
-                            data.push({
+                            data.push({{
                                 url: aTag.href,
                                 title: title,
-                                price: price
-                            });
-                        }
-                    });
+                                price: price,
+                                is_free: isFree
+                            }});
+                        }}
+                    }});
                     
                     // Strategy 2: Older layout - result-row
-                    if (data.length === 0) {
+                    if (data.length === 0) {{
                         const listItems = document.querySelectorAll('.result-row, li.result-row');
-                        listItems.forEach(row => {
+                        listItems.forEach(row => {{
                             const a = row.querySelector('.result-title.hdrlnk, a.result-title');
-                            if (a && a.href) {
+                            if (a && a.href) {{
                                 const meta = row.querySelector('.result-meta .result-price, .result-price');
-                                data.push({
+                                data.push({{
                                     url: a.href,
                                     title: a.textContent?.trim() || 'Untitled',
-                                    price: meta ? meta.textContent?.trim() : null
-                                });
-                            }
-                        });
-                    }
+                                    price: meta ? meta.textContent?.trim() : null,
+                                    is_free: isFree
+                                }});
+                            }}
+                        }});
+                    }}
                     
                     // Strategy 3: Generic - find all links that look like posting links
-                    if (data.length === 0) {
+                    if (data.length === 0) {{
                         const allLinks = document.querySelectorAll('a[href*="/d/"], a[href*=".html"]');
-                        allLinks.forEach(link => {
+                        allLinks.forEach(link => {{
                             const href = link.getAttribute('href');
-                            if (href && (href.includes('/d/') || href.endsWith('.html'))) {
+                            if (href && (href.includes('/d/') || href.endsWith('.html'))) {{
                                 const parent = link.closest('li, .result-row, [data-pid]');
-                                if (parent) {
+                                if (parent) {{
                                     const title = link.textContent?.trim() || link.getAttribute('title') || 'Untitled';
                                     const priceElem = parent.querySelector('.price, [class*="price"]');
-                                    data.push({
+                                    data.push({{
                                         url: href.startsWith('http') ? href : new URL(href, window.location.href).href,
                                         title: title,
-                                        price: priceElem ? priceElem.textContent?.trim() : null
-                                    });
-                                }
-                            }
-                        });
-                    }
+                                        price: priceElem ? priceElem.textContent?.trim() : null,
+                                        is_free: isFree
+                                    }});
+                                }}
+                            }}
+                        }});
+                    }}
                     
                     // Remove duplicates based on URL
                     const unique = [];
                     const seen = new Set();
-                    data.forEach(item => {
-                        if (!seen.has(item.url)) {
+                    data.forEach(item => {{
+                        if (!seen.has(item.url)) {{
                             seen.add(item.url);
                             unique.push(item);
-                        }
-                    });
+                        }}
+                    }});
                     
                     return unique;
-                }''')
+                }}''', is_free_section)
                 
                 listings_data = results
                 self.logger.info(f"Found {len(listings_data)} listings from {clean_url}")

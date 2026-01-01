@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ExternalLink, TrendingUp, RefreshCw } from "lucide-react"
+import { ExternalLink, TrendingUp, RefreshCw, Gift, Star, BarChart3 } from "lucide-react"
 
 interface Listing {
     id: number
@@ -18,13 +18,20 @@ interface Listing {
     is_arbitrage_opportunity: boolean
     profit_potential: number | null
     date_scraped: string
+    is_free_item?: boolean
+    category?: string | null
+    market_demand?: string | null
+    recommended_price?: number | null
+    ad_quality_score?: number | null
+    ad_quality_json?: any
+    market_research_json?: any
 }
 
 export default function ListingsPage() {
     const [listings, setListings] = useState<Listing[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [filter, setFilter] = useState<"all" | "opportunities">("all")
+    const [filter, setFilter] = useState<"all" | "opportunities" | "free">("all")
     const [searchQuery, setSearchQuery] = useState("")
 
     useEffect(() => {
@@ -36,9 +43,12 @@ export default function ListingsPage() {
             setLoading(true)
             setError(null)
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-            const endpoint = filter === "opportunities" 
-                ? `${apiUrl}/api/listings/opportunities`
-                : `${apiUrl}/api/listings`
+            let endpoint = `${apiUrl}/api/listings`
+            if (filter === "opportunities") {
+                endpoint = `${apiUrl}/api/listings/opportunities`
+            } else if (filter === "free") {
+                endpoint = `${apiUrl}/api/listings/free`
+            }
             
             const response = await fetch(endpoint)
             
@@ -99,6 +109,13 @@ export default function ListingsPage() {
                     >
                         Opportunities Only
                     </Button>
+                    <Button
+                        variant={filter === "free" ? "default" : "outline"}
+                        onClick={() => setFilter("free")}
+                    >
+                        <Gift className="mr-2 h-4 w-4" />
+                        Free Items
+                    </Button>
                 </div>
                 <Input
                     placeholder="Search by title or location..."
@@ -111,7 +128,11 @@ export default function ListingsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>
-                        {filter === "opportunities" ? "Arbitrage Opportunities" : "All Listings"}
+                        {filter === "opportunities" 
+                            ? "Arbitrage Opportunities" 
+                            : filter === "free"
+                            ? "Free Items (100% Profit Potential)"
+                            : "All Listings"}
                     </CardTitle>
                     <CardDescription>
                         {filteredListings.length} {filteredListings.length === 1 ? "listing" : "listings"} found
@@ -150,7 +171,9 @@ export default function ListingsPage() {
                                 <TableRow>
                                     <TableHead>Title</TableHead>
                                     <TableHead>Price</TableHead>
+                                    <TableHead>Category</TableHead>
                                     <TableHead>Profit Potential</TableHead>
+                                    <TableHead>Ad Quality</TableHead>
                                     <TableHead>Location</TableHead>
                                     <TableHead>Scraped</TableHead>
                                     <TableHead>Actions</TableHead>
@@ -160,10 +183,29 @@ export default function ListingsPage() {
                                 {filteredListings.map((listing) => (
                                     <TableRow key={listing.id}>
                                         <TableCell className="font-medium">
-                                            {listing.title || "Untitled"}
+                                            <div className="flex items-center gap-2">
+                                                {listing.title || "Untitled"}
+                                                {listing.is_free_item && (
+                                                    <Badge variant="secondary" className="gap-1">
+                                                        <Gift className="h-3 w-3" />
+                                                        Free
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell>
-                                            {formatCurrency(listing.price)}
+                                            {listing.is_free_item ? (
+                                                <Badge variant="outline" className="text-green-600">FREE</Badge>
+                                            ) : (
+                                                formatCurrency(listing.price)
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {listing.category ? (
+                                                <Badge variant="outline">{listing.category}</Badge>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">—</span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             {listing.is_arbitrage_opportunity && listing.profit_potential ? (
@@ -171,6 +213,21 @@ export default function ListingsPage() {
                                                     <TrendingUp className="h-3 w-3" />
                                                     {formatCurrency(listing.profit_potential)}
                                                 </Badge>
+                                            ) : listing.is_free_item ? (
+                                                <Badge variant="secondary" className="gap-1">
+                                                    <TrendingUp className="h-3 w-3" />
+                                                    100% Profit
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-sm text-muted-foreground">—</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            {listing.ad_quality_score !== null && listing.ad_quality_score !== undefined ? (
+                                                <div className="flex items-center gap-1">
+                                                    <Star className={`h-3 w-3 ${listing.ad_quality_score >= 70 ? 'text-yellow-500 fill-yellow-500' : listing.ad_quality_score >= 50 ? 'text-yellow-300' : 'text-gray-300'}`} />
+                                                    <span className="text-sm">{listing.ad_quality_score.toFixed(0)}</span>
+                                                </div>
                                             ) : (
                                                 <span className="text-sm text-muted-foreground">—</span>
                                             )}
