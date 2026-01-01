@@ -35,6 +35,15 @@ class Listing(Base):
     analysis_json = Column(JSON, nullable=True) # Store full AI analysis
     is_arbitrage_opportunity = Column(Boolean, default=False)
     profit_potential = Column(Float, nullable=True)
+    
+    # Enhanced analysis fields (from PDF strategies)
+    category = Column(String, nullable=True) # e.g., 'car', 'appliance', 'furniture'
+    market_demand = Column(String, nullable=True) # 'high', 'medium', 'low'
+    recommended_price = Column(Float, nullable=True) # Recommended resale price
+    ad_quality_score = Column(Float, nullable=True) # 0-100 score
+    ad_quality_json = Column(JSON, nullable=True) # Full ad quality analysis
+    market_research_json = Column(JSON, nullable=True) # Market research data
+    is_free_item = Column(Boolean, default=False) # True if from "free" section
 
 class Lead(Base):
     __tablename__ = "leads"
