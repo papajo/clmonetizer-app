@@ -42,22 +42,46 @@ class AIService:
         self.api_key_configured = False
         self.provider = None
         
-        # Prefer Gemini if available
-        if GEMINI_AVAILABLE and gemini_key and not gemini_key.startswith("dummy"):
+        # Prefer OpenAI if both are available (more reliable)
+        # Try OpenAI first if available
+        if OPENAI_AVAILABLE and openai_key and not openai_key.startswith("sk-dummy") and openai_key != "":
             try:
-                self.llm = ChatGoogleGenerativeAI(
-                    model="gemini-pro",
-                    google_api_key=gemini_key,
-                    temperature=0
-                )
+                self.llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0, api_key=openai_key)
                 self.api_key_configured = True
-                self.provider = "gemini"
-                print("✅ Using Gemini API for AI analysis")
+                self.provider = "openai"
+                print("✅ Using OpenAI API for AI analysis")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize OpenAI: {e}")
+        
+        # Fallback to Gemini if OpenAI not available
+        if not self.api_key_configured and GEMINI_AVAILABLE and gemini_key and not gemini_key.startswith("dummy"):
+            try:
+                # Try different model names - the correct one depends on API version
+                model_names = ["gemini-pro", "models/gemini-pro", "gemini-1.5-flash", "gemini-1.5-pro"]
+                gemini_initialized = False
+                
+                for model_name in model_names:
+                    try:
+                        self.llm = ChatGoogleGenerativeAI(
+                            model=model_name,
+                            google_api_key=gemini_key,
+                            temperature=0
+                        )
+                        self.api_key_configured = True
+                        self.provider = "gemini"
+                        print(f"✅ Using Gemini API ({model_name}) for AI analysis")
+                        gemini_initialized = True
+                        break
+                    except Exception as model_error:
+                        if "404" in str(model_error) or "NOT_FOUND" in str(model_error):
+                            continue
+                        else:
+                            raise model_error
+                
+                if not gemini_initialized:
+                    print(f"⚠️  Gemini models not available with current API key.")
             except Exception as e:
                 print(f"⚠️  Failed to initialize Gemini: {e}")
-        
-        # Fallback to OpenAI
-        if not self.api_key_configured and OPENAI_AVAILABLE and openai_key and not openai_key.startswith("sk-dummy") and openai_key != "":
             try:
                 self.llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0, api_key=openai_key)
                 self.api_key_configured = True

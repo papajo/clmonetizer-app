@@ -232,7 +232,9 @@ export default function DashboardPage() {
                                 <div className="text-center py-8 text-muted-foreground">
                                     <p>
                                         {stats && !stats.ai_configured 
-                                            ? "AI analysis is not configured. Set up your OpenAI API key to analyze listings for arbitrage opportunities."
+                                            ? "AI analysis is not configured. Set up your GEMINI_API_KEY or OPENAI_API_KEY in .env file to analyze listings for arbitrage opportunities."
+                                            : stats && stats.total_listings > 0 && stats.opportunities === 0
+                                            ? "No arbitrage opportunities found in your listings. This could mean: (1) The listings haven't been analyzed yet - click 'Re-analyze' below, (2) The AI determined there are no good deals, or (3) Try scraping different categories (electronics, furniture, vehicles)."
                                             : "No opportunities found yet. Start scraping to discover deals!"
                                         }
                                     </p>
